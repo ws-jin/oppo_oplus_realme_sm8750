@@ -86,6 +86,13 @@ on:
         required: false
         type: string
         default: ''
+      # ↓↓↓ 在这里添加自定义提交哈希参数 ↓↓↓
+      custom_commit_hash:
+        description: '自定义提交哈希（可选，留空使用默认分支）'
+        required: false
+        type: string
+        default: ''
+      # ↑↑↑ 在这里添加自定义提交哈希参数 ↑↑↑
 
 jobs:
   build:
@@ -133,6 +140,43 @@ jobs:
             sed -i 's/ -dirty//g' "$f"
             sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
           done
+
+          # ==================== 在这里添加新步骤 ====================
+      - name: 应用自定义提交哈希
+        if: inputs.custom_commit_hash != ''
+        run: |
+          echo "正在检查并应用自定义提交哈希..."
+          cd kernel_workspace/common
+          
+          # 显示当前提交信息
+          echo "=== 当前提交信息 ==="
+          git log -1 --oneline
+          echo "==================="
+          
+          # 检查输入的提交哈希是否存在
+          CUSTOM_HASH="${{ github.event.inputs.custom_commit_hash }}"
+          echo "正在检查提交哈希: $CUSTOM_HASH"
+          
+          if git rev-parse --verify "$CUSTOM_HASH^{commit}" >/dev/null 2>&1; then
+            echo "✅ 提交哈希有效，正在切换到指定提交..."
+            git checkout "$CUSTOM_HASH"
+            echo "✅ 已成功切换到提交: $CUSTOM_HASH"
+            echo "=== 切换后提交信息 ==="
+            git log -1 --oneline
+            echo "=== 提交详细信息 ==="
+            git log -1 --pretty=format:"提交: %H%n作者: %an <%ae>%n日期: %ad%n描述: %s"
+            echo "==================="
+          else
+            echo "❌ 警告: 提交哈希 $CUSTOM_HASH 不存在！"
+            echo "❌ 将使用默认分支的最新提交"
+            echo "=== 可用分支 ==="
+            git branch -a
+            echo "=== 最近10个标签 ==="
+            git tag -l | tail -10
+            echo "=== 最近10次提交 ==="
+            git log --oneline -10
+          fi
+      # ==================== 添加完成 ====================
 
       - name: 配置ccache目录
         run: |
@@ -739,6 +783,7 @@ jobs:
             ### 📱 欧加真 Android 15 ${{ env.KSU_BRANCH }} SM8750 通用内核 | 构建信息
             - 内核版本号: ${{ env.FULL_VERSION }}
             - 编译时间: ${{ env.TIME_FORM }}
+            - 自定义提交哈希: ${{ github.event.inputs.custom_commit_hash || '使用默认分支' }}
             - 机型：欧加真骁龙8Elite 6.6.66 Android 15内核通用（基于一加13 6.6.66 版官方OKI源码）
             - 特性：${{ env.KSU_BRANCH }} + SUSFS + 风驰内核
             - hook模式：${{ github.event.inputs.hook_method }}
